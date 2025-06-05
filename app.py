@@ -80,7 +80,8 @@ else:
         'client_id': CLIENT_ID,
         'client_secret': CLIENT_SECRET,
         'code': code,
-        'grant_type': 'authorization_code'
+        'grant_type': 'authorization_code',
+        'redirect_uri': REDIRECT_URI
     })
 
     if response.status_code == 200:
