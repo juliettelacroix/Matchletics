@@ -2,11 +2,9 @@
 import streamlit as st
 import requests
 
-# Strava app credentials
-CLIENT_ID = "163006"
-CLIENT_SECRET = "7d4bcfed7f9e6300c2e23daca31376245e514fb7"
-REDIRECT_URI = "https://juliettelacroix.streamlit.app"
-
+CLIENT_ID = st.secrets["CLIENT_ID"]
+CLIENT_SECRET = st.secrets["CLIENT_SECRET"]
+REDIRECT_URI = st.secrets["REDIRECT_URI"]
 
 st.title("🔗 Connect to Strava")
 
@@ -20,18 +18,17 @@ auth_url = (
     f"&approval_prompt=force"
 )
 
-# Step 2: Show login button
-if "code" not in st.experimental_get_query_params():
+# Step 2: Show login button if no code yet
+params = st.query_params
+if "code" not in params:
     st.markdown(f"[🔐 Click here to connect your Strava account]({auth_url})")
-
-# Step 3: After redirect, capture the `code`
-params = st.experimental_get_query_params()
-if "code" in params:
+else:
+    # Step 3: Capture the code from URL
     code = params["code"][0]
     st.success("✅ Authorization code received!")
     st.code(code)
 
-    # Step 4: Exchange the code for an access token
+    # Step 4: Exchange the code for access token
     response = requests.post("https://www.strava.com/oauth/token", data={
         'client_id': CLIENT_ID,
         'client_secret': CLIENT_SECRET,
