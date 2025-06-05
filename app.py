@@ -1,6 +1,53 @@
 # Streamlit App
 import streamlit as st
 import requests
+import pandas as pd 
+import os 
+
+def get_all_activities(access_token):
+    activities = []
+    page = 1
+    per_page = 50  # max is 200, but 50 is safe default
+
+    headers = {'Authorization': f'Bearer {access_token}'}
+
+    while True:
+        url = f'https://www.strava.com/api/v3/athlete/activities?page={page}&per_page={per_page}'
+        response = requests.get(url, headers=headers)
+
+        if response.status_code != 200:
+            st.error(f"Failed to fetch activities: {response.status_code}")
+            break
+
+        data = response.json()
+        if not data:
+            break  # no more pages
+
+        activities.extend(data)
+        page += 1
+
+    return activities
+
+def activities_to_df(activities):
+    rows = []
+    for act in activities:
+        row = {
+            'activity_id': act.get('id'),
+            'athlete_id': act.get('athlete', {}).get('id'),
+            'name': act.get('name'),
+            'type': act.get('type'),
+            'distance_m': act.get('distance'),
+            'elapsed_time_s': act.get('elapsed_time'),
+            'start_date': act.get('start_date'),
+            'start_latlng': act.get('start_latlng'),  # list like [lat, lng]
+            'end_latlng': act.get('end_latlng'),
+            'total_elevation_gain': act.get('total_elevation_gain'),
+        }
+        rows.append(row)
+
+    df = pd.DataFrame(rows)
+    return df
+
 
 CLIENT_ID = st.secrets["CLIENT_ID"]
 CLIENT_SECRET = st.secrets["CLIENT_SECRET"]
@@ -42,6 +89,35 @@ else:
         refresh_token = tokens["refresh_token"]
         st.success("🔑 Tokens retrieved successfully!")
         st.json(tokens)
+
+        activities = get_all_activities(access_token)
+        st.write(f"Fetched {len(activities)} activities")
+
+        df = activities_to_df(activities)
+
+        csv_file = "all_athletes_activities.csv"
+
+        if os.path.exists(csv_file):
+            df_existing = pd.read_csv(csv_file)
+        else:
+            df_existing = pd.DataFrame()
+
+        df_combined = pd.concat([df_existing, df], ignore_index=True)
+        df_combined.drop_duplicates(subset=["activity_id"], inplace=True)
+
+        df_combined.to_csv(csv_file, index=False)
+
+        st.success(f"✅ Données sauvegardées. Total : {len(df_combined)} activités.")
+        st.dataframe(df_combined)
+
+        csv = df_combined.to_csv(index=False)
+        st.download_button(
+            label="📥 Télécharger toutes les activités (CSV)",
+            data=csv,
+            file_name="all_athletes_activities.csv",
+            mime="text/csv"
+        )
+
     else:
         st.error("❌ Failed to get tokens")
         st.json(response.json())
