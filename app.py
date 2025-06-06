@@ -4,10 +4,27 @@ import requests
 import pandas as pd 
 import os 
 
+# -------- Loading Secrets --------
+
+CLIENT_ID = st.secrets["CLIENT_ID"]
+CLIENT_SECRET = st.secrets["CLIENT_SECRET"]
+REDIRECT_URI = st.secrets["REDIRECT_URI"]
+IS_OWNER = st.secrets.get("IS_OWNER", False)
+
+# -------- Loading Internal Data --------
+
+csv_file = "all_athletes_activities.csv"
+if os.path.exists(csv_file):
+    df_combined_all = pd.read_csv(csv_file)
+else:
+    df_combined_all = pd.DataFrame()
+
+# -------- Helper Functions --------
+
 def get_all_activities(access_token):
     activities = []
     page = 1
-    per_page = 50  # max is 200, but 50 is safe default
+    per_page = 50  # max is 200, but 50 is safer
 
     headers = {'Authorization': f'Bearer {access_token}'}
 
@@ -21,7 +38,7 @@ def get_all_activities(access_token):
 
         data = response.json()
         if not data:
-            break  # no more pages
+            break
 
         activities.extend(data)
         page += 1
@@ -48,10 +65,7 @@ def activities_to_df(activities):
     df = pd.DataFrame(rows)
     return df
 
-
-CLIENT_ID = st.secrets["CLIENT_ID"]
-CLIENT_SECRET = st.secrets["CLIENT_SECRET"]
-REDIRECT_URI = st.secrets["REDIRECT_URI"]
+# -------- Streamlit App UI --------
 
 st.title("🔗 Connect to Strava")
 
@@ -65,15 +79,15 @@ auth_url = (
     f"&approval_prompt=force"
 )
 
-# Step 2: Show login button if no code yet
+# Step 2: Show login button
 params = st.query_params
 if "code" not in params:
     st.markdown(f"[🔐 Click here to connect your Strava account]({auth_url})")
+
+# Step 3: Capture the code from URL
 else:
-    # Step 3: Capture the code from URL
     code = params["code"][0]
-    st.success("✅ Authorization code received!")
-    st.code(code)
+    st.success("✅ Authentification Successful")
 
     # Step 4: Exchange the code for access token
     response = requests.post("https://www.strava.com/oauth/token", data={
@@ -88,36 +102,25 @@ else:
         tokens = response.json()
         access_token = tokens["access_token"]
         refresh_token = tokens["refresh_token"]
-        st.success("🔑 Tokens retrieved successfully!")
-        st.json(tokens)
+        athlete_id = tokens["athlete"]["id"]
 
-        activities = get_all_activities(access_token)
-        st.write(f"Fetched {len(activities)} activities")
+        # Step 5: Fetch user's activities
+        with st.spinner("⏳ Fetching your Strava activities..."):
+            activities = get_all_activities(access_token)
+            df_user = activities_to_df(activities)
+        
+        st.success(f"✅ Data Uploaded. {len(df_user)} activites were stored.")
+        st.dataframe(df_user)
 
-        df = activities_to_df(activities)
+        # Step 6: Combine data into one single dataframe
+        df_combined_all = pd.concat([df_combined_all, df_user], ignore_index=True)
+        df_combined_all.drop_duplicates(subset=["activity_id"], inplace=True)
+        df_combined_all.to_csv(csv_file, index=False)
 
-        csv_file = "all_athletes_activities.csv"
-
-        if os.path.exists(csv_file):
-            df_existing = pd.read_csv(csv_file)
-        else:
-            df_existing = pd.DataFrame()
-
-        df_combined = pd.concat([df_existing, df], ignore_index=True)
-        df_combined.drop_duplicates(subset=["activity_id"], inplace=True)
-
-        df_combined.to_csv(csv_file, index=False)
-
-        st.success(f"✅ Données sauvegardées. Total : {len(df_combined)} activités.")
-        st.dataframe(df_combined)
-
-        csv = df_combined.to_csv(index=False)
-        st.download_button(
-            label="📥 Télécharger toutes les activités (CSV)",
-            data=csv,
-            file_name="all_athletes_activities.csv",
-            mime="text/csv"
-        )
+        # Step 7: Owner-only can download combined data
+        if IS_OWNER:
+            st.subheader("Full Dataset (Owner Only)")
+            st.dataframe(df_combined_all)
 
     else:
         st.error("❌ Failed to get tokens")
