@@ -125,3 +125,12 @@ else:
     else:
         st.error("❌ Failed to get tokens")
         st.json(response.json())
+
+if IS_OWNER and not df_combined_all.empty:
+    csv_all = df_combined_all.to_csv(index=False)
+    st.download_button(
+        label="📥 Load all activities (Owner Only)",
+        data=csv_all,
+        file_name="all_athletes_activities.csv",
+        mime="text/csv"
+    )
